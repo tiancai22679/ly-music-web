@@ -242,7 +242,12 @@ function applyTheme(mode) {
   root.classList.toggle('theme-light', isLight)
   setIcon(els.themeToggle, isLight ? 'moon' : 'sun')
   setIcon(els.themeToggleP, isLight ? 'moon' : 'sun')
-  if (themeMeta) themeMeta.setAttribute('content', isLight ? '#eef0f6' : '#0b0b12')
+  if (themeMeta) themeMeta.setAttribute('content', isLight ? '#faf6ee' : '#0b0b12')
+  // 歌词当前句用渐变填充(color:transparent)，配色依赖主题，切换后立即重绘，
+  // 避免停留在浅色/深色旧配色导致当前句看不见
+  if (currentLyricIdx >= 0 && lyricLines[currentLyricIdx] && lyricLines[currentLyricIdx].el) {
+    try { updateLyricFill(audio.currentTime || 0) } catch (_) {}
+  }
 }
 function toggleTheme() {
   const isLight = document.documentElement.classList.contains('theme-light')
@@ -828,13 +833,21 @@ function updateLyric(cur) {
   updateLyricFill(ref)
 }
 
-// KTV 逐字上色：已唱部分为亮色，未唱部分为暗色，按当前句进度 p(0~1) 左→右推进
-const LYRIC_FILL_COLOR = '#ff4d6d'                 // 已唱：主题红
-const LYRIC_FILL_DIM = 'rgba(244,244,248,0.5)'    // 未唱：浅灰
+// KTV 逐字上色：已唱部分为主题红，未唱部分按主题取对比色，按当前句进度 p(0~1) 左→右推进
+// 注意：这里把 color 设为 transparent 交给渐变填充，因此未唱色必须与背景有足够对比度，
+// 否则浅色(暖白)模式下当前句会「白底白字」看不见（历史 bug）。
+const LYRIC_FILL_COLOR_DARK = '#ff4d6d'            // 深色模式已唱：主题亮红
+const LYRIC_FILL_COLOR_LIGHT = '#c8203f'           // 浅色模式已唱：深红（暖白底上对比度约 5:1）
+const LYRIC_FILL_DIM_DARK = 'rgba(244,244,248,0.5)'   // 深色模式未唱：浅灰
+const LYRIC_FILL_DIM_LIGHT = 'rgba(36,31,26,0.92)'    // 浅色模式未唱：暖黑近实心（暖白底上约 12:1）
+function isLightTheme() { return document.documentElement.classList.contains('theme-light') }
 function setLyricFill(el, p) {
   const pct = (p * 100).toFixed(2)
+  const light = isLightTheme()
+  const fill = light ? LYRIC_FILL_COLOR_LIGHT : LYRIC_FILL_COLOR_DARK
+  const dim = light ? LYRIC_FILL_DIM_LIGHT : LYRIC_FILL_DIM_DARK
   el.style.backgroundImage =
-    `linear-gradient(90deg, ${LYRIC_FILL_COLOR} 0%, ${LYRIC_FILL_COLOR} ${pct}%, ${LYRIC_FILL_DIM} ${pct}%, ${LYRIC_FILL_DIM} 100%)`
+    `linear-gradient(90deg, ${fill} 0%, ${fill} ${pct}%, ${dim} ${pct}%, ${dim} 100%)`
   el.style.webkitBackgroundClip = 'text'
   el.style.backgroundClip = 'text'
   el.style.color = 'transparent'

@@ -734,5 +734,8 @@ html, body {
 .theme-light .mini { background: rgba(252, 248, 240, 0.94); }
 .theme-light .shuffle-card:focus-visible { outline-color: var(--text); }
 .theme-light .shuffle-icon { background: rgba(120, 92, 60, 0.12); }
+/* 歌词非当前行：--faint 在暖白底上仅 2.3:1，单独加深保证可读 */
+.theme-light .lyric-line { color: rgba(60, 48, 36, 0.66); }
+.theme-light .lyric-line.active { color: #241f1a; }
 .theme-light .home::-webkit-scrollbar-thumb,
 .theme-light .search-panel::-webkit-scrollbar-thumb { background: rgba(120, 92, 60, 0.22); }
