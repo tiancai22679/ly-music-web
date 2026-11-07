@@ -364,12 +364,6 @@ async function loadPlaylistViaImport(id, name) {
   return { list: songs, source: plat, note }
 }
 
-// 当前用于随机播放 / 音源切换刷新的列表 id（优先用歌单，否则用榜单）
-function currentListId() {
-  if (state.listKind === 'playlist' && state.playlistId) return state.playlistId
-  return state.board
-}
-
 // ---------- 渲染：热门歌单（分页加载，不再固定 20 个）----------
 const PLAYLIST_PAGE = 60   // 封面缩小后一屏能放下更多，每页直接拉 60 个（各平台已验证支持且翻页无重叠）
 
@@ -921,36 +915,54 @@ function initPlayerStage() {
 }
 
 // ---------- 事件绑定 ----------
+// 首页「随机播放」：
+// ① 当前播放列表已有内容 → 直接从现有队列随机一首（不重拉接口、不覆盖队列，
+//    保留用户用「加入播放列表」攒的歌与当前列表标题）；
+// ② 播放列表为空 → 默认从热歌榜拉一批并随机一首（作为初始队列渲染出来）。
+function randomIndex(len) {
+  if (len <= 1) return 0
+  let n
+  do { n = Math.floor(Math.random() * len) } while (n === state.index)
+  return n
+}
 els.shuffleBtn.onclick = async () => {
+  if (state.playlist.length) {
+    const n = randomIndex(state.playlist.length)
+    state.index = n
+    // 只更新主列表高亮，不重建 DOM（搜索面板打开时不越界高亮）
+    if (state.searchList === null) {
+      [...els.songList.children].forEach((c, idx) => c.classList.toggle('playing', idx === n))
+    }
+    playCurrent()
+    openPlayer()
+    return
+  }
   els.listLoading.classList.remove('hidden')
   try {
-    // 随机播放从「当前选中的列表」（歌单优先，否则榜单）里取一首；
-    // 歌单按歌单平台、榜单按榜单平台，两者相互独立
-    const isPlaylist = state.listKind === 'playlist'
-    const plat = isPlaylist ? state.playlistPlat : state.boardPlat
-    const id = currentListId()
-    let data = isPlaylist
-      ? await API.playlist(id, plat, 1000)
-      : await API.hot(id, 1000, plat)
-    if (!isPlaylist && (!data.list || !data.list.length)) {
-      // 兜底：当前榜单拿不到歌时切回该平台的默认榜再试一次
-      const def = DEFAULT_BOARD[plat] || DEFAULT_BOARD.ny
-      state.board = def.id
-      data = await API.hot(def.id, 1000, plat)
+    const plat = state.boardPlat
+    const def = DEFAULT_BOARD[plat] || DEFAULT_BOARD.ny
+    // 空队列时回到榜单模式，避免后续音源切换刷新还拿着旧的歌单 id
+    state.listKind = 'board'
+    state.playlistId = null
+    state.board = def.id
+    state.listName = def.name
+    let data = await API.hot(def.id, 1000, plat)
+    if (!data.list || !data.list.length) {
+      // 兜底：该平台热歌榜拿不到歌时切回网易云热歌榜再试一次
+      data = await API.hot(DEFAULT_BOARD.ny.id, 1000, 'ny')
     }
     const list = data.list || []
+    if (!list.length) { alert('随机播放失败：热歌榜暂无歌曲，请换个音源试试'); return }
     state.playlist = list
-    state.listTitle = '随机播放'
+    state.listTitle = def.name
     state.listSource = data.source || nativeOf(preferSource)
     state.listNote = data.note || ''
+    state.index = Math.floor(Math.random() * list.length)
+    els.listTitle.textContent = def.name + ' · 精选'
+    renderSongList(list, els.songList, { queue: true })
     renderListMeta(data)
-    if (list.length) {
-      state.index = Math.floor(Math.random() * list.length)
-      playCurrent()
-      openPlayer()
-    } else {
-      alert('随机播放失败：榜单暂无歌曲，请换一个榜单或音源试试')
-    }
+    playCurrent()
+    openPlayer()
   } catch (e) {
     alert('随机播放失败：' + e.message)
   } finally {
