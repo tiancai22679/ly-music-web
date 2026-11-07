@@ -243,11 +243,6 @@ function applyTheme(mode) {
   setIcon(els.themeToggle, isLight ? 'moon' : 'sun')
   setIcon(els.themeToggleP, isLight ? 'moon' : 'sun')
   if (themeMeta) themeMeta.setAttribute('content', isLight ? '#faf6ee' : '#0b0b12')
-  // 歌词当前句用渐变填充(color:transparent)，配色依赖主题，切换后立即重绘，
-  // 避免停留在浅色/深色旧配色导致当前句看不见
-  if (currentLyricIdx >= 0 && lyricLines[currentLyricIdx] && lyricLines[currentLyricIdx].el) {
-    try { updateLyricFill(audio.currentTime || 0) } catch (_) {}
-  }
 }
 function toggleTheme() {
   const isLight = document.documentElement.classList.contains('theme-light')
@@ -814,7 +809,6 @@ function updateLyric(cur) {
     if (currentLyricIdx >= 0 && lyricLines[currentLyricIdx] && lyricLines[currentLyricIdx].el) {
       const pe = lyricLines[currentLyricIdx].el
       pe.classList.remove('active')
-      clearLyricFill(pe)
     }
     currentLyricIdx = idx
     const el = idx >= 0 ? lyricLines[idx].el : null
@@ -829,48 +823,7 @@ function updateLyric(cur) {
       animateLyricScroll(Math.max(0, target))
     }
   }
-  // 当前句 KTV 渐变填充：随演唱进度从左往右上色（每帧刷新）
-  updateLyricFill(ref)
-}
-
-// KTV 逐字上色：已唱部分为主题红，未唱部分按主题取对比色，按当前句进度 p(0~1) 左→右推进
-// 注意：这里把 color 设为 transparent 交给渐变填充，因此未唱色必须与背景有足够对比度，
-// 否则浅色(暖白)模式下当前句会「白底白字」看不见（历史 bug）。
-const LYRIC_FILL_COLOR_DARK = '#ff4d6d'            // 深色模式已唱：主题亮红
-const LYRIC_FILL_COLOR_LIGHT = '#c8203f'           // 浅色模式已唱：深红（暖白底上对比度约 5:1）
-const LYRIC_FILL_DIM_DARK = 'rgba(244,244,248,0.5)'   // 深色模式未唱：浅灰
-const LYRIC_FILL_DIM_LIGHT = 'rgba(36,31,26,0.92)'    // 浅色模式未唱：暖黑近实心（暖白底上约 12:1）
-function isLightTheme() { return document.documentElement.classList.contains('theme-light') }
-function setLyricFill(el, p) {
-  const pct = (p * 100).toFixed(2)
-  const light = isLightTheme()
-  const fill = light ? LYRIC_FILL_COLOR_LIGHT : LYRIC_FILL_COLOR_DARK
-  const dim = light ? LYRIC_FILL_DIM_LIGHT : LYRIC_FILL_DIM_DARK
-  el.style.backgroundImage =
-    `linear-gradient(90deg, ${fill} 0%, ${fill} ${pct}%, ${dim} ${pct}%, ${dim} 100%)`
-  el.style.webkitBackgroundClip = 'text'
-  el.style.backgroundClip = 'text'
-  el.style.color = 'transparent'
-  el.style.webkitTextFillColor = 'transparent'
-}
-function clearLyricFill(el) {
-  el.style.backgroundImage = ''
-  el.style.webkitBackgroundClip = ''
-  el.style.backgroundClip = ''
-  el.style.color = ''
-  el.style.webkitTextFillColor = ''
-}
-function updateLyricFill(ref) {
-  if (currentLyricIdx < 0) return
-  const ln = lyricLines[currentLyricIdx]
-  if (!ln || !ln.el) return
-  const next = lyricLines[currentLyricIdx + 1]
-  const start = ln.t
-  const end = next ? next.t : (audio.duration || start + 4)
-  const span = Math.max(0.5, end - start)
-  let p = (ref - start) / span
-  p = Math.max(0, Math.min(1, p))
-  setLyricFill(ln.el, p)
+  // 当前行高亮由 CSS .lyric-line.active 负责（字号/字重/颜色），不再做逐字进度填充
 }
 
 // ---------- 音频事件 ----------
