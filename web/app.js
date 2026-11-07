@@ -31,6 +31,9 @@ const API = {
   importSource: (payload) =>
     fetch('/api/source/import', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
       .then((r) => r.json()),
+  subscribe: (payload) =>
+    fetch('/api/source/subscribe', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
+      .then((r) => r.json()),
   testSource: (id) =>
     fetch('/api/source/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id }) })
       .then((r) => r.json()),
@@ -128,6 +131,8 @@ const els = {
   sourceCode: $('sourceCode'),
   sourceImportUrl: $('sourceImportUrl'),
   sourceImportCode: $('sourceImportCode'),
+  sourceSubUrl: $('sourceSubUrl'),
+  sourceImportSub: $('sourceImportSub'),
   sourceTestAll: $('sourceTestAll'),
   sourcePick: $('sourcePick'),
   sourceChip: $('sourceChip'),
@@ -1317,6 +1322,24 @@ async function deleteOneSource(sid, name) {
     els.sourceMsg.className = 'panel-msg err'
   }
 }
+// 订阅清单批量导入结果：逐项列出 已导入 / 已存在 / 不兼容 / 失败
+const SUB_STATUS = {
+  imported: '已导入', duplicate: '已存在', incompatible: '不兼容', failed: '失败',
+}
+function renderSubscribeResult(r) {
+  const head = `订阅导入完成：共 ${r.total} 项 · 成功 ${r.imported} · 已存在 ${r.duplicate} · 不兼容 ${r.incompatible} · 失败 ${r.failed}`
+  const rows = (r.results || []).map((x) => {
+    const detail = [
+      x.id ? 'id=' + x.id : '',
+      (x.sources && x.sources.length) ? '音源 ' + x.sources.join(', ') : '',
+      x.reason || '',
+    ].filter(Boolean).join(' · ')
+    return `<li class="sub-row sub-${x.status}"><b>[${SUB_STATUS[x.status] || x.status}]</b> ${escapeHtml(x.name || '(未命名)')}<span class="sub-detail">${escapeHtml(detail)}</span></li>`
+  }).join('')
+  els.sourceMsg.className = 'panel-msg sub-result'
+  els.sourceMsg.innerHTML = `<div class="sub-head">${escapeHtml(head)}</div><ul class="sub-list">${rows}</ul>`
+}
+
 async function importSource(payload, label) {
   els.sourceMsg.textContent = '正在导入…'
   els.sourceMsg.className = 'panel-msg'
@@ -1325,6 +1348,11 @@ async function importSource(payload, label) {
     if (r.error) {
       els.sourceMsg.textContent = '导入失败：' + r.error
       els.sourceMsg.className = 'panel-msg err'
+      return
+    }
+    if (r.subscription) {
+      renderSubscribeResult(r)
+      await openSources()
       return
     }
     if (r.duplicate) {
@@ -1368,6 +1396,28 @@ els.sourceImportCode.onclick = () => {
   const code = els.sourceCode.value
   if (!code || !code.trim()) return
   importSource({ code, id: 'lx' }, '脚本内容')
+}
+els.sourceImportSub.onclick = async () => {
+  const url = els.sourceSubUrl.value.trim()
+  if (!url) return
+  els.sourceMsg.textContent = '正在读取订阅清单并逐项导入，请稍候…'
+  els.sourceMsg.className = 'panel-msg'
+  els.sourceImportSub.disabled = true
+  try {
+    const r = await API.subscribe({ url })
+    if (r.error) {
+      els.sourceMsg.textContent = '导入失败：' + r.error
+      els.sourceMsg.className = 'panel-msg err'
+    } else {
+      renderSubscribeResult(r)
+      await openSources()
+    }
+  } catch (e) {
+    els.sourceMsg.textContent = '导入失败：' + e.message
+    els.sourceMsg.className = 'panel-msg err'
+  } finally {
+    els.sourceImportSub.disabled = false
+  }
 }
 
 // ---------- 初始化 ----------

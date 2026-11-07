@@ -893,6 +893,110 @@ function findExistingScript(code) {
   return null
 }
 
+// ---------- 音源订阅清单（MusicFree myPlugins.json / 洛雪源清单 通用） ----------
+// 识别常见形态：顶层数组；或 {plugins|sources|list|items|data:[...]}；或 {data:{list:[...]}}
+// 每项需含 http(s) 的下载地址（url | srcUrl | downloadUrl | script | link | source）
+function parseSubscription(text) {
+  let j
+  try { j = JSON.parse(String(text || '')) } catch (_) { return null }
+  if (!j || typeof j !== 'object') return null
+  let arr = null, shape = ''
+  if (Array.isArray(j)) { arr = j; shape = 'array' }
+  else {
+    for (const k of ['plugins', 'sources', 'list', 'items', 'data', 'result']) {
+      const v = j[k]
+      if (Array.isArray(v)) { arr = v; shape = k; break }
+      if (v && typeof v === 'object') {
+        for (const k2 of ['list', 'items', 'plugins', 'sources']) {
+          if (Array.isArray(v[k2])) { arr = v[k2]; shape = k + '.' + k2; break }
+        }
+        if (arr) break
+      }
+    }
+  }
+  if (!arr || !arr.length) return null
+  const items = []
+  for (const it of arr) {
+    if (!it || typeof it !== 'object') continue
+    const u = it.url || it.srcUrl || it.downloadUrl || it.script || it.link || it.source || ''
+    if (typeof u !== 'string' || !/^https?:\/\//i.test(u)) continue
+    items.push({
+      name: String(it.name || it.title || it.label || '').slice(0, 80),
+      url: u,
+      version: String(it.version || ''),
+    })
+  }
+  return items.length ? { shape, items } : null
+}
+
+// 判定脚本生态：洛雪(globalThis.lx / EVENT_NAMES) vs MusicFree(module.exports / globalThis.mf)
+function detectScriptKind(code) {
+  const s = String(code || '')
+  if (/globalThis\.lx\b|EVENT_NAMES|@name\s/.test(s)) return 'lx'
+  if (/module\.exports|exports\.default|__esModule|globalThis\.mf\b|appVersion|supportedSearchType|primaryKey/.test(s)) return 'musicfree'
+  return 'unknown'
+}
+
+// 导入单个洛雪脚本（去重 → 落盘 → 启动），供单脚本导入与订阅批量导入共用
+async function importScriptCode(code, idBase) {
+  const exists = findExistingScript(code)
+  if (exists) {
+    const entry0 = lxSources.get(exists)
+    return {
+      ok: true, duplicate: true, id: exists,
+      sources: entry0 ? Object.keys(entry0.sources) : [],
+      message: '该脚本已存在（' + exists + '），未重复导入',
+    }
+  }
+  const id = `${idBase}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+  fs.mkdirSync(USER_SOURCES_DIR, { recursive: true })
+  const file = path.join(USER_SOURCES_DIR, id + '.js')
+  fs.writeFileSync(file, code)
+  const entry = await bootLxSource(file, { id, name: id })
+  if (!entry) {
+    try { fs.unlinkSync(file) } catch (_) {}
+    return { error: '源脚本初始化失败（格式不支持或接口异常）' }
+  }
+  return { ok: true, id, sources: Object.keys(entry.sources) }
+}
+
+// 批量导入：串行执行（lxsource 运行时共享 globalThis.lx，不能并发 boot）
+async function runSubscribe(sub, idBase) {
+  const results = []
+  for (const it of sub.items) {
+    const row = { name: it.name || '', url: it.url, version: it.version || '' }
+    try {
+      const resp = await fetchText(it.url, { timeout: 20000 })
+      if (resp.status !== 200) {
+        results.push({ ...row, status: 'failed', reason: '下载失败 HTTP ' + resp.status })
+        continue
+      }
+      const kind = detectScriptKind(resp.text)
+      if (kind === 'musicfree') {
+        results.push({ ...row, status: 'incompatible', kind, reason: 'MusicFree 插件格式，当前洛雪运行时不支持' })
+        continue
+      }
+      if (kind === 'unknown') {
+        results.push({ ...row, status: 'incompatible', kind, reason: '非洛雪源脚本格式，已跳过' })
+        continue
+      }
+      const r = await importScriptCode(resp.text, idBase)
+      if (r.error) results.push({ ...row, status: 'failed', reason: r.error })
+      else if (r.duplicate) results.push({ ...row, status: 'duplicate', id: r.id, reason: r.message })
+      else results.push({ ...row, status: 'imported', id: r.id, sources: r.sources })
+    } catch (e) {
+      results.push({ ...row, status: 'failed', reason: e.message || '未知错误' })
+    }
+  }
+  const count = (s) => results.filter((r) => r.status === s).length
+  return {
+    ok: true, subscription: true, shape: sub.shape, total: sub.items.length,
+    imported: count('imported'), duplicate: count('duplicate'),
+    incompatible: count('incompatible'), failed: count('failed'),
+    results,
+  }
+}
+
 // ---------- API 路由 ----------
 function sendJSON(res, obj, code = 200) {
   const s = JSON.stringify(obj)
@@ -1339,39 +1443,41 @@ async function handleApi(req, res, pathname, query) {
     }
     if (pathname === '/api/source/import') {
       if (req.method !== 'POST') return sendJSON(res, { error: '需要 POST' }, 405)
-      let raw = ''
-      for await (const chunk of req) raw += chunk
-      let payload = {}
-      try { payload = JSON.parse(raw || '{}') } catch (_) {}
+      const payload = await readBody(req)
       const idBase = (payload.id || 'user').replace(/[^\w.-]/g, '')
       let code = payload.code
       if (!code && payload.url) {
         const r = await fetchText(payload.url, { timeout: 20000 })
         if (r.status !== 200) return sendJSON(res, { error: '下载失败 HTTP ' + r.status }, 502)
+        // 自动识别订阅清单：贴 JSON 订阅链接进来时，展开成批量导入
+        const sub = parseSubscription(r.text)
+        if (sub) return sendJSON(res, await runSubscribe(sub, idBase))
         code = r.text
       }
       if (!code) return sendJSON(res, { error: '缺少 code 或 url' }, 400)
-      // 同一份脚本已存在则不重复导入
-      const exists = findExistingScript(code)
-      if (exists) {
-        const entry0 = lxSources.get(exists)
-        return sendJSON(res, {
-          ok: true,
-          duplicate: true,
-          id: exists,
-          sources: entry0 ? Object.keys(entry0.sources) : [],
-          message: '该脚本已存在（' + exists + '），未重复导入',
-        })
+      // 明确区分 MusicFree 插件（与洛雪运行时不兼容），避免落盘后才报笼统错误
+      const kind = detectScriptKind(code)
+      if (kind === 'musicfree') {
+        return sendJSON(res, { error: '这是 MusicFree 插件，与当前洛雪音源运行时不兼容（需要 axios/crypto-js 等 npm 依赖）' }, 400)
       }
-      const id = `${idBase}-${Date.now().toString(36)}`
-      fs.mkdirSync(USER_SOURCES_DIR, { recursive: true })
-      fs.writeFileSync(path.join(USER_SOURCES_DIR, id + '.js'), code)
-      const entry = await bootLxSource(path.join(USER_SOURCES_DIR, id + '.js'), { id, name: id })
-      if (!entry) {
-        try { fs.unlinkSync(path.join(USER_SOURCES_DIR, id + '.js')) } catch (_) {}
-        return sendJSON(res, { error: '源脚本初始化失败（格式不支持或接口异常）' }, 400)
+      const out = await importScriptCode(code, idBase)
+      return out.error ? sendJSON(res, { error: out.error }, 400) : sendJSON(res, out)
+    }
+    // 订阅清单专用入口：传 {url} 或 {json}，返回逐项导入明细
+    if (pathname === '/api/source/subscribe') {
+      if (req.method !== 'POST') return sendJSON(res, { error: '需要 POST' }, 405)
+      const payload = await readBody(req)
+      let text = payload.json
+      if (!text && payload.url) {
+        const r = await fetchText(payload.url, { timeout: 20000 })
+        if (r.status !== 200) return sendJSON(res, { error: '订阅下载失败 HTTP ' + r.status }, 502)
+        text = r.text
       }
-      return sendJSON(res, { ok: true, id, sources: Object.keys(entry.sources) })
+      if (!text) return sendJSON(res, { error: '缺少 url 或 json' }, 400)
+      const sub = parseSubscription(text)
+      if (!sub) return sendJSON(res, { error: '无法识别订阅清单（需要数组，或含 plugins/sources/list 数组的对象，且每项有 http(s) 下载地址）' }, 400)
+      const idBase = (payload.id || 'sub').replace(/[^\w.-]/g, '')
+      return sendJSON(res, await runSubscribe(sub, idBase))
     }
     // ---- 轻量预检 ----
     // 只剔除明显不是洛雪源脚本 / 有风险的样本；

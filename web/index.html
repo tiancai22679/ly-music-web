@@ -99,7 +99,12 @@
     <div class="panel-hint">「自动」= 内置 → 洛雪脚本 → 跨源匹配 依次回退；手动指定后优先用该音源，取不到会自动回退。<br />切换后首页榜单与搜索会同步刷新：列表数据由对应引擎提供（网易云 / 酷我），点播放时再用所选音源取址（洛雪脚本只提供取址能力，不提供搜索与榜单接口）。</div>
     <button id="sourceTestAll" class="btn btn--ghost panel-btn">测试全部音源</button>
     <ul id="sourceList" class="source-list"></ul>
+    <div class="panel-section">导入订阅清单（JSON 链接）</div>
+    <div class="panel-hint">支持 MusicFree <code>myPlugins.json</code> / 洛雪源清单：顶层数组或含 <code>plugins/sources/list</code> 数组的对象，每项带脚本 URL。会自动展开逐项导入，并标明不兼容的插件。</div>
+    <input id="sourceSubUrl" class="search-input" type="url" placeholder="https://.../myPlugins.json" />
+    <button id="sourceImportSub" class="btn btn--primary panel-btn">导入订阅</button>
     <div class="panel-section">从 URL 导入洛雪源脚本</div>
+    <div class="panel-hint">贴订阅 JSON 链接到这里也会自动识别并批量导入。</div>
     <input id="sourceUrl" class="search-input" type="url" placeholder="https://.../lx-music-source.js" />
     <button id="sourceImportUrl" class="btn btn--primary panel-btn">导入 URL</button>
     <div class="panel-section">或直接粘贴脚本内容</div>

@@ -433,6 +433,24 @@ html, body {
 }
 .panel-msg.ok { color: var(--ok); }
 .panel-msg.err { color: var(--bad); }
+/* 订阅清单批量导入结果 */
+.sub-result { color: var(--text); }
+.sub-head { font-weight: 600; margin-bottom: 6px; }
+.sub-list { list-style: none; max-height: 220px; overflow-y: auto; }
+.sub-row {
+  padding: 5px 0; border-top: 1px solid var(--stroke-1);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.sub-row b { margin-right: 6px; font-weight: 600; }
+.sub-imported b { color: var(--ok); }
+.sub-duplicate b { color: var(--sub); }
+.sub-incompatible b { color: var(--warn); }
+.sub-failed b { color: var(--bad); }
+.sub-detail { color: var(--sub); font-size: 11px; padding-left: 2px; word-break: break-all; }
+.panel-hint code {
+  background: var(--surface-2); border-radius: 4px;
+  padding: 1px 4px; font-size: 11px;
+}
 
 .panel-select {
   width: 100%; min-height: var(--tap); padding: 0 12px; font-size: 14px;
