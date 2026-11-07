@@ -288,30 +288,41 @@ html, body {
   box-shadow: 0 6px 16px rgba(124, 92, 255, 0.3);
 }
 
-/* ---------- 热门歌单网格 ---------- */
+/* ---------- 热门歌单网格（紧凑模式） ----------
+   封面边长 ≈ 原 3 列网格单元宽的 1/3 → 面积 ≈ 原来的 1/9；
+   卡片改为「小封面 + 文字」横向排布，行列同时变密，一屏显示更多歌单。 */
 .playlist-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
   padding: 2px 0 4px;
 }
 .playlist-card {
-  display: flex; flex-direction: column; gap: 0; padding: 0; cursor: pointer;
-  background: none; border: none; font-family: inherit; text-align: left;
-  border-radius: var(--r-md); overflow: hidden;
-  transition: transform var(--dur) var(--ease);
+  display: flex; align-items: center; gap: 8px; padding: 6px;
+  min-width: 0; cursor: pointer;
+  background: var(--surface-1); border: 1px solid var(--stroke-1);
+  font-family: inherit; text-align: left; color: var(--text);
+  border-radius: var(--r-sm); overflow: hidden;
+  transition: transform var(--dur) var(--ease), background var(--dur) var(--ease);
 }
-.playlist-card:active { transform: scale(0.96); }
+.playlist-card:hover { background: var(--surface-2); }
+.playlist-card:active { transform: scale(0.97); }
+.playlist-card.active { border-color: var(--accent); }
 .playlist-card.active .playlist-cover { box-shadow: 0 0 0 2px var(--accent); }
 .playlist-cover {
-  width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: var(--r-md);
+  flex: none;
+  width: clamp(34px, calc((100vw - 56px) / 9), 60px);
+  height: clamp(34px, calc((100vw - 56px) / 9), 60px);
+  aspect-ratio: 1 / 1; object-fit: cover; border-radius: 6px;
   background: var(--surface-2); display: block;
 }
+.playlist-text { flex: 1; min-width: 0; }
 .playlist-name {
-  font-size: 13px; font-weight: 500; margin-top: 7px; color: var(--text);
+  font-size: 12px; font-weight: 500; color: var(--text);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  line-height: 1.35; min-height: 35px;
+  line-height: 1.3;
 }
-.playlist-meta { font-size: 11px; color: var(--faint); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@media (min-width: 560px) { .playlist-grid { grid-template-columns: repeat(4, 1fr); } }
+.playlist-meta { font-size: 10px; color: var(--faint); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (min-width: 560px) { .playlist-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 900px) { .playlist-grid { grid-template-columns: repeat(4, 1fr); } }
 
 /* ---------- 歌曲列表 ---------- */
 .song-list { list-style: none; }

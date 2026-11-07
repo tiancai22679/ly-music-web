@@ -371,7 +371,7 @@ function currentListId() {
 }
 
 // ---------- 渲染：热门歌单（分页加载，不再固定 20 个）----------
-const PLAYLIST_PAGE = 20
+const PLAYLIST_PAGE = 60   // 封面缩小后一屏能放下更多，每页直接拉 60 个（各平台已验证支持且翻页无重叠）
 
 // 歌单分页：reset=true 清空并从第 1 页重头加载；否则以已加载数量作 offset 追加下一页
 async function loadPlaylistsPage(reset) {
@@ -404,8 +404,11 @@ async function loadPlaylistsPage(reset) {
       card.dataset.plat = plat
       card.innerHTML =
         `<img class="playlist-cover" src="${p.cover ? '/api/cover?u=' + encodeURIComponent(p.cover) : ''}" alt="" loading="lazy" />` +
-        `<div class="playlist-name">${escapeHtml(p.name)}</div>` +
-        `<div class="playlist-meta">${p.playCount ? '▶ ' + formatPlayCount(p.playCount) : ''}${p.creator ? ' · ' + escapeHtml(p.creator) : ''}</div>`
+        `<div class="playlist-text">` +
+          `<div class="playlist-name">${escapeHtml(p.name)}</div>` +
+          `<div class="playlist-meta">${p.playCount ? '▶ ' + formatPlayCount(p.playCount) : ''}${p.creator ? ' · ' + escapeHtml(p.creator) : ''}</div>` +
+        `</div>`
+      card.title = p.name + (p.creator ? ' · ' + p.creator : '')   // 紧凑布局下悬停看全名
       card.onclick = () => selectPlaylist(p)
       els.playlistGrid.appendChild(card)
     })
