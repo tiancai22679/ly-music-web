@@ -55,12 +55,13 @@ function fetchJSON(url, timeout = 15000) {
       throw e
     })
 }
-// 封面：优先用歌曲自带直链，否则用 id 走后端解析
+// 封面：优先用歌曲自带直链，否则用 id 走后端解析；都没有则用项目 logo 占位，避免破图
+const LOGO_PLACEHOLDER = 'assets/ly-logo-192.png?v=20261107f'
 const coverURL = (song) => {
-  if (!song) return ''
+  if (!song) return LOGO_PLACEHOLDER
   if (song.cover) return '/api/cover?u=' + encodeURIComponent(song.cover)
   if (song.id) return '/api/cover?id=' + encodeURIComponent(song.id)
-  return ''
+  return LOGO_PLACEHOLDER
 }
 const audioURL = (u) => '/api/audio?u=' + encodeURIComponent(u)
 
@@ -404,7 +405,7 @@ async function loadPlaylistsPage(reset) {
       card.dataset.id = String(p.id)
       card.dataset.plat = plat
       card.innerHTML =
-        `<img class="playlist-cover" src="${p.cover ? '/api/cover?u=' + encodeURIComponent(p.cover) : ''}" alt="" loading="lazy" />` +
+        `<img class="playlist-cover" src="${p.cover ? '/api/cover?u=' + encodeURIComponent(p.cover) : LOGO_PLACEHOLDER}" alt="" loading="lazy" />` +
         `<div class="playlist-text">` +
           `<div class="playlist-name">${escapeHtml(p.name)}</div>` +
           `<div class="playlist-meta">${p.playCount ? '▶ ' + formatPlayCount(p.playCount) : ''}${p.creator ? ' · ' + escapeHtml(p.creator) : ''}</div>` +
@@ -886,6 +887,16 @@ function initPlayerStage() {
     dots.forEach((d, k) => d.classList.toggle('active', k === i))
   }, { passive: true })
 }
+
+// 封面加载失败（上游 404 / 无版权图）时回退到项目 logo，避免破图；
+// 用捕获阶段监听，可覆盖动态渲染的所有 img
+document.addEventListener('error', (e) => {
+  const img = e.target
+  if (!(img instanceof HTMLImageElement)) return
+  if (img.dataset.fallback === '1') return
+  img.dataset.fallback = '1'
+  img.src = LOGO_PLACEHOLDER
+}, true)
 
 // ---------- 事件绑定 ----------
 // 首页「随机播放」：

@@ -1,5 +1,7 @@
 # 利阳·随心听 (ly-music-web)
 
+<p align="center"><img src="./web/assets/ly-logo-192.png" alt="利阳·随心听 Logo" width="128" /></p>
+
 > ⚠️ **仅供个人学习与技术研究，禁止任何商业用途。**
 > 本项目采用 [署名-非商业性使用许可](./LICENSE)（2026-11-07 起，原 MIT 授权已终止）。
 > 使用前请阅读 [免责声明](./DISCLAIMER.md) 与 [致谢 / 版权归属](./CREDITS.md)。

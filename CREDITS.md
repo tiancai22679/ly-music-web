@@ -40,6 +40,18 @@
 - **jsDelivr** — 社区维护的公共 CDN（仅用于用户自行提供的订阅/脚本链接示例）
 - **Docker / Docker Compose** — 部署方式
 - **jsdom** — 仅开发期前端冒烟测试（devDependency）
+- **Pillow / NumPy** — 仅用于本地生成 logo 素材（非运行时依赖）
+
+## 三之二、项目 Logo
+
+项目标识「LY 几何科技渐变 Logo」由**本项目使用者（仓库维护者）提供**，
+用于顶栏品牌图标、favicon、Apple Touch Icon 与无封面占位。
+
+- 原始素材为带透明棋盘格预览的 JPG；`tools_make_logo.py` 将其按色度抠成
+  真正透明的 PNG，并导出 1024/512/192/180/64/32 及多尺寸 ICO，输出位于
+  `web/assets/`。该脚本仅为素材加工工具，不是运行时代码。
+- Logo 版权归提供者所有，随本项目一同受 [LICENSE](./LICENSE) 约束；
+  **不得单独商用**或用于暗示与第三方存在官方关联。
 
 ## 四、社区音源脚本作者
 
