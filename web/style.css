@@ -49,28 +49,30 @@
 /* ---------- 浅色模式：覆写变量 ---------- */
 :root.theme-light {
   color-scheme: light;
-  --surface-1: rgba(0, 0, 0, 0.03);
-  --surface-2: rgba(0, 0, 0, 0.055);
-  --surface-3: rgba(0, 0, 0, 0.09);
-  --surface-4: rgba(0, 0, 0, 0.14);
+  /* 表面/描边用暖棕半透明，避免纯黑叠加在暖白上泛冷灰 */
+  --surface-1: rgba(120, 92, 60, 0.045);
+  --surface-2: rgba(120, 92, 60, 0.075);
+  --surface-3: rgba(120, 92, 60, 0.11);
+  --surface-4: rgba(120, 92, 60, 0.16);
 
-  --stroke-1: rgba(0, 0, 0, 0.07);
-  --stroke-2: rgba(0, 0, 0, 0.12);
-  --stroke-3: rgba(0, 0, 0, 0.22);
+  --stroke-1: rgba(120, 92, 60, 0.10);
+  --stroke-2: rgba(120, 92, 60, 0.16);
+  --stroke-3: rgba(120, 92, 60, 0.26);
 
-  --bg: #eef0f6;
-  --text: #1a1a22;
-  --sub: rgba(26, 26, 34, 0.62);
-  --faint: rgba(26, 26, 34, 0.4);
+  /* 暖白主题：背景由冷灰蓝 #eef0f6 改为象牙暖白，文字用暖黑保证对比度 */
+  --bg: #faf6ee;
+  --text: #241f1a;
+  --sub: rgba(60, 48, 36, 0.66);
+  --faint: rgba(60, 48, 36, 0.42);
 
-  --player-bg: rgba(246, 246, 250, 0.82);
-  --sheet: rgba(255, 255, 255, 0.97);
-  --sheet-solid: rgba(250, 250, 253, 0.98);
-  --track: rgba(0, 0, 0, 0.10);
+  --player-bg: rgba(252, 248, 240, 0.86);
+  --sheet: rgba(253, 249, 242, 0.97);
+  --sheet-solid: rgba(250, 246, 237, 0.98);
+  --track: rgba(90, 70, 45, 0.12);
   --pill-bg: var(--accent);
   --pill-fg: #fff;
-  --select-bg: #ffffff;
-  --select-fg: #1a1a22;
+  --select-bg: #fdf9f1;
+  --select-fg: #241f1a;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -292,7 +294,7 @@ html, body {
    封面边长 ≈ 原 3 列网格单元宽的 1/3 → 面积 ≈ 原来的 1/9；
    卡片改为「小封面 + 文字」横向排布，行列同时变密，一屏显示更多歌单。 */
 .playlist-grid {
-  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
   padding: 2px 0 4px;
 }
 .playlist-card {
@@ -321,8 +323,14 @@ html, body {
   line-height: 1.3;
 }
 .playlist-meta { font-size: 10px; color: var(--faint); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@media (min-width: 560px) { .playlist-grid { grid-template-columns: repeat(3, 1fr); } }
-@media (min-width: 900px) { .playlist-grid { grid-template-columns: repeat(4, 1fr); } }
+/* 宽屏按「最小卡片宽度」自动填充列数，避免固定 3/4 列在 1920px 上被拉得过宽显得稀松。
+   卡片内容只有小封面 + 两行文字，220px 左右最紧凑；屏幕越宽列数越多。 */
+@media (min-width: 560px) {
+  .playlist-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+}
+@media (min-width: 1200px) {
+  .playlist-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+}
 
 /* ---------- 歌曲列表 ---------- */
 .song-list { list-style: none; }
@@ -712,14 +720,19 @@ html, body {
 .playlist-more { display: block; margin: 12px auto 0; min-height: var(--tap); padding: 0 20px; }
 .hidden { display: none !important; }
 
-/* ---------- 浅色模式：剩余硬编码表面的覆写 ---------- */
+/* ---------- 浅色模式：剩余硬编码表面的覆写（暖白） ---------- */
+/* 深色模式把封面压暗到 0.4；浅色模式必须提亮并降饱和，否则整屏发灰 */
+.theme-light .bg { filter: blur(40px) brightness(1.12) saturate(0.55); }
 .theme-light .bg::after {
-  background: linear-gradient(180deg, rgba(238, 240, 246, 0.45), rgba(238, 240, 246, 0.92));
+  background: linear-gradient(180deg, rgba(250, 246, 238, 0.62), rgba(250, 246, 238, 0.94));
 }
 .theme-light .topbar {
-  background: linear-gradient(180deg, rgba(238, 240, 246, 0.94), rgba(238, 240, 246, 0));
+  background: linear-gradient(180deg, rgba(250, 246, 238, 0.96), rgba(250, 246, 238, 0));
 }
-.theme-light .chip { background: rgba(0, 0, 0, 0.05); }
-.theme-light .chip:hover { background: rgba(0, 0, 0, 0.09); }
-.theme-light .mini { background: rgba(250, 250, 253, 0.92); }
+.theme-light .chip { background: rgba(120, 92, 60, 0.08); }
+.theme-light .chip:hover { background: rgba(120, 92, 60, 0.14); }
+.theme-light .mini { background: rgba(252, 248, 240, 0.94); }
 .theme-light .shuffle-card:focus-visible { outline-color: var(--text); }
+.theme-light .shuffle-icon { background: rgba(120, 92, 60, 0.12); }
+.theme-light .home::-webkit-scrollbar-thumb,
+.theme-light .search-panel::-webkit-scrollbar-thumb { background: rgba(120, 92, 60, 0.22); }
