@@ -331,6 +331,17 @@ async function loadList(id, name) {
   }
 }
 
+// 多音源匹配结果说明：如实展示各引擎命中数与宽松匹配数
+function matchViaNote(m) {
+  if (!m) return ''
+  const stats = m.viaStats || {}
+  const parts = Object.keys(stats).map((k) => `${k} ${stats[k]}`)
+  const bits = []
+  if (parts.length) bits.push('匹配音源：' + parts.join('、'))
+  if (m.loose) bits.push(`${m.loose} 首为宽松匹配（歌名相同、歌手可能不同）`)
+  return bits.join('；')
+}
+
 // QQ/酷狗歌单：直连歌曲接口受平台签名/风控限制拉不到曲目，
 // 改为「解析歌单分享链接拿到曲目名 → 逐首搜索匹配」的导入流程，返回可播放歌曲列表
 async function loadPlaylistViaImport(id, name) {
@@ -349,7 +360,7 @@ async function loadPlaylistViaImport(id, name) {
   let miss = 0
   ;(m.results || []).forEach((r) => { if (r.ok && r.song) songs.push(r.song); else miss++ })
   if (!songs.length) throw new Error('逐首匹配均未命中，可改用「粘贴歌单导入」手动匹配')
-  const note = [parsed.warning, miss ? `${miss} 首未匹配已跳过（共 ${m.total} 首）` : ''].filter(Boolean).join('；')
+  const note = [parsed.warning, miss ? `${miss} 首未匹配已跳过（共 ${m.total} 首）` : '', matchViaNote(m)].filter(Boolean).join('；')
   return { list: songs, source: plat, note }
 }
 
@@ -1114,7 +1125,7 @@ els.pasteGo.onclick = async () => {
       els.pasteMsg.textContent = '一首都没匹配到，请检查格式（每行一首：歌名 - 歌手）'
       return
     }
-    const note = [matchNote, miss ? `${miss} 首未匹配到，已跳过（共 ${data.total} 首）` : ''].filter(Boolean).join('；')
+    const note = [matchNote, miss ? `${miss} 首未匹配到，已跳过（共 ${data.total} 首）` : '', matchViaNote(data)].filter(Boolean).join('；')
     closePaste()
     applyExternalPlaylist(songs, matchLabel, note)
   } catch (e) {

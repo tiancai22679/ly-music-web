@@ -119,11 +119,11 @@
       <div class="panel-title">粘贴歌单 / 曲目</div>
       <button id="pasteClose" class="btn btn--icon icon-btn" aria-label="关闭"></button>
     </div>
-    <div class="panel-hint">支持三种输入：<br />① 网易云歌单链接（music.163.com/playlist?id=…）→ 直接读取曲目并播放；<br />② 其它平台歌单链接（QQ音乐 / 千千 / 酷狗 / 酷我 / KKBOX / Apple Music / Spotify）→ 自动解析出「歌名 - 歌手」再逐首匹配播放；<br />③ 曲目文本：每行一首，如「晴天 - 周杰伦」。解析后我会用搜索逐首匹配并播放（默认用酷我曲库匹配，网易搜索结果近期被平台污染、易匹配到翻唱，故仅建议手动选择时使用）。</div>
+    <div class="panel-hint">支持三种输入：<br />① 网易云歌单链接（music.163.com/playlist?id=…）→ 直接读取曲目并播放；<br />② 其它平台歌单链接（QQ音乐 / 千千 / 酷狗 / 酷我 / KKBOX / Apple Music / Spotify）→ 自动解析出「歌名 - 歌手」再逐首匹配播放；<br />③ 曲目文本：每行一首，如「晴天 - 周杰伦」。匹配时会在多个音源间自动切换（酷我 → 网易云 → 带搜索能力的洛雪脚本），并对带括号备注的歌名做净化重试，尽量让每首歌都命中；匹配完成后会显示各音源命中数。</div>
     <textarea id="pasteArea" class="panel-area" rows="8" placeholder="粘贴歌单链接，或曲目文本：&#10;晴天 - 周杰伦&#10;稻香&#10;七里香 - 周杰伦"></textarea>
     <div class="paste-row">
       <select id="pasteSource" class="panel-select" aria-label="匹配搜索引擎">
-        <option value="auto">自动（酷我曲库·推荐）</option>
+        <option value="auto">自动（多音源切换·推荐）</option>
         <option value="ny">网易云</option>
         <option value="kw">酷我</option>
       </select>

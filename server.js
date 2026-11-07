@@ -997,6 +997,117 @@ async function runSubscribe(sub, idBase) {
   }
 }
 
+// ---------- 歌单曲目匹配：多音源自动切换 ----------
+// 说明：上游对高频并发敏感（实测并发 6 无限流会把命中率从 31 打到 14），
+// 故采用「低并发 + 每 worker 节流 + 仅未命中才切引擎」而非全量双查。
+const MATCH_CONCURRENCY = 3      // 同时进行的曲目数
+const MATCH_GAP_MS = 130         // 同一 worker 两次上游请求之间的最小间隔
+const MATCH_BUDGET = 6           // 单首歌最多发起几次上游搜索（防止引擎多时请求失控）
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// 歌名净化：去掉括号备注 / feat / Live / DJ版 / 音质标签，用于二次检索
+// 例：「暖暖 (香皂泡DJ版)」→「暖暖」，「晴天 (Live)」→「晴天」
+function cleanSongName(name) {
+  return String(name || '')
+    .replace(/[（(【\[「『][^）)】\]」』]{0,40}[）)】\]」』]/g, ' ')
+    .replace(/\s*(?:feat\.?|ft\.?|with)\s+.*$/i, ' ')
+    .replace(/\s*(?:live|remix|dj|dj版|伴奏|纯音乐|cover|翻唱|版)$/i, ' ')
+    .replace(/[\s\-–—_]+/g, ' ')
+    .trim()
+}
+
+// 组装可用搜索引擎池：用户指定优先 → 酷我 → 网易云 → 所有带 musicSearch 的洛雪脚本
+function buildMatchEngines(reqSrc) {
+  const engines = []
+  const seen = new Set()
+  const add = (e) => { if (e && !seen.has(e.key)) { seen.add(e.key); engines.push(e) } }
+  const native = (plat) => add({ key: plat, label: plat === 'kw' ? '酷我' : '网易云', kind: 'native', plat })
+  if (reqSrc && reqSrc !== 'auto') {
+    const pref = parseSourceParam(reqSrc)
+    if (pref.kind === 'lx' && (pref.info.actions || []).includes('musicSearch')) {
+      add({ key: `lx:${pref.script}:${pref.plat}`, label: `脚本 ${pref.script}`, kind: 'lx', entry: pref.entry, plat: pref.plat })
+    } else if (pref.kind === 'native' && (pref.plat === 'kw' || pref.plat === 'ny')) {
+      native(pref.plat)
+    }
+  }
+  native('kw')  // 排序正常（原唱第一），默认首选
+  native('ny')
+  // 自动纳入所有实现了 musicSearch 的洛雪脚本（用户以后导入也会自动生效）
+  for (const [sid, entry] of lxSources) {
+    for (const [plat, raw] of Object.entries(entry.sources)) {
+      const info = sourceMeta(entry, plat) || raw
+      if ((info.actions || []).includes('musicSearch')) {
+        add({ key: `lx:${sid}:${plat}`, label: `脚本 ${sid}`, kind: 'lx', entry, plat })
+      }
+    }
+  }
+  return engines
+}
+
+async function searchWithEngine(eng, q, limit) {
+  if (eng.kind === 'lx') {
+    const r0 = await eng.entry.runtime.call('musicSearch', eng.plat, { text: q, limit, page: 1 })
+    return normalizeLxSearch(r0, eng.plat) || []
+  }
+  const list = eng.plat === 'kw' ? await kw.search(q, limit) : await ny.search(q, limit)
+  return Array.isArray(list) ? list : []
+}
+
+// 单首歌匹配：先严格打分，未命中则依次尝试 净化歌名 / 其它引擎，最后宽松兜底
+async function matchOneSong(it, engines, scoreOf, norm) {
+  const rawName = String(it.name || '').trim()
+  const artist = String(it.artist || '').trim()
+  if (!rawName) return { ok: false, query: it, reason: '空行' }
+  const clean = cleanSongName(rawName)
+  // 检索词候选：原始「歌名 歌手」→ 净化歌名「+ 歌手」→ 仅净化歌名
+  const queries = []
+  const pushQ = (q) => { const s = q.trim(); if (s && !queries.includes(s)) queries.push(s) }
+  pushQ(`${rawName} ${artist}`)
+  if (clean && clean !== rawName) { pushQ(`${clean} ${artist}`); pushQ(clean) }
+  if (!queries.length) return { ok: false, query: it, reason: '空行' }
+
+  let spent = 0
+  const candidates = []   // 收集所有见过的候选，供宽松兜底
+  let lastErr = ''
+  for (const eng of engines) {
+    for (const q of queries) {
+      if (spent >= MATCH_BUDGET) break
+      spent++
+      let list
+      try {
+        list = await searchWithEngine(eng, q, 8)
+      } catch (e) {
+        lastErr = e && e.message ? e.message : '搜索异常'
+        await sleep(180)   // 上游抖动：短退避后继续下一个组合
+        continue
+      }
+      if (!Array.isArray(list)) continue
+      for (const s of list) if (s && s.id && !candidates.some((c) => c.id === s.id && c.source === s.source)) candidates.push(s)
+      let hit = null, best = 0
+      for (const s of list) {
+        const sc = scoreOf(it, s)
+        if (sc > best) { best = sc; hit = s }
+      }
+      if (hit) return { ok: true, query: it, song: hit, via: eng.key, viaLabel: eng.label, tries: spent }
+      if (spent < MATCH_BUDGET) await sleep(MATCH_GAP_MS)
+    }
+    if (spent >= MATCH_BUDGET) break
+  }
+  // 宽松兜底：净化后歌名完全相等即接受（歌手不吻合不再扣分），但明确标记 loose
+  const qn = norm(cleanSongName(rawName) || rawName)
+  if (qn.length >= 2) {
+    let loose = null, looseBest = 0
+    for (const s of candidates) {
+      if (norm(cleanSongName(s.name)) !== qn) continue
+      const qa = norm(artist), cs = norm(s.singer)
+      const sc = 1 + (qa && cs && (cs.includes(qa) || qa.includes(cs)) ? 1 : 0)
+      if (sc > looseBest) { looseBest = sc; loose = s }
+    }
+    if (loose) return { ok: true, query: it, song: loose, loose: true, via: 'loose', viaLabel: '宽松匹配', tries: spent }
+  }
+  return { ok: false, query: it, reason: lastErr ? '搜索失败：' + lastErr : '未找到匹配', tries: spent }
+}
+
 // ---------- API 路由 ----------
 function sendJSON(res, obj, code = 200) {
   const s = JSON.stringify(obj)
@@ -1222,15 +1333,9 @@ async function handleApi(req, res, pathname, query) {
     if (pathname === '/api/match') {
       const payload = await readBody(req)
       const items = Array.isArray(payload.items) ? payload.items.slice(0, 100) : []
-      // 引擎选择：网易匿名搜索接口被污染（"晴天 周杰伦"前10全是翻唱/搬运号），
-      // 酷我 search.kuwo.cn 排序正常（原唱第一），故默认（auto）走酷我；显式选网易才走网易
+      // 多引擎池：用户指定优先，其后 酷我 → 网易云 → 带 musicSearch 的洛雪脚本
       const reqSrc = String(payload.source || 'auto')
-      let plat
-      if (reqSrc === 'auto' || reqSrc === 'kw') plat = 'kw'
-      else {
-        const pref = parseSourceParam(reqSrc)
-        plat = listNative(pref.plat)
-      }
+      const engines = buildMatchEngines(reqSrc)
       // 候选打分：规范化后歌名须相等/互相包含（门槛），歌手吻合加分、不符扣分（挡翻唱/搬运号）
       const norm = (s) => String(s || '').toLowerCase()
         .replace(/[（(【\[「『].*?[）)】\]」』]/g, '')
@@ -1247,35 +1352,32 @@ async function handleApi(req, res, pathname, query) {
         let sc = cn === qn ? 3 : 1
         const qa = norm(it.artist), cs = norm(s.singer)
         if (qa) sc += (cs && (cs.includes(qa) || qa.includes(cs))) ? 3 : -2
+        // 明显翻唱/伴奏/改编且查询里没有该标记时轻微降权（0.5 < 最小分差 1），
+        // 只影响同分候选的排序，不会把 1 分打成 0 而丢掉命中
+        if (/翻自|cover\s*[:：]|伴奏|网友改编|不插电|纯音乐|试听版/i.test(String(s.name || '')) &&
+            !/翻自|cover\s*[:：]|伴奏|网友改编|不插电|纯音乐|试听版/i.test(String(it.name || ''))) sc -= 0.5
         return sc
       }
-      // 并发池：同时最多 6 路搜索，避免 80 首串行拖到几十秒
+      // 低并发 + 每 worker 节流：避免高频并发触发上游限流（历史教训）
       const results = new Array(items.length)
       let cursor = 0
       const worker = async () => {
         while (cursor < items.length) {
           const i = cursor++
-          const it = items[i] || {}
-          const q = [it.name, it.artist].filter(Boolean).join(' ').trim()
-          if (!q) { results[i] = { ok: false, query: it, reason: '空行' }; continue }
-          try {
-            const list = plat === 'kw' ? await kw.search(q, 8) : await ny.search(q, 8)
-            let hit = null, best = 0
-            for (const s of list || []) {
-              const sc = scoreOf(it, s)
-              if (sc > best) { best = sc; hit = s }
-            }
-            // 注：曾尝试「主引擎未命中时用备选引擎(酷我↔网易云)重试」以提升命中率，
-            // 但会让请求量翻倍，在上游限流时反而拉低整体命中（实测波动 9~31），故暂不启用。
-            results[i] = hit ? { ok: true, query: it, song: hit } : { ok: false, query: it, reason: '未找到匹配' }
-          } catch (_) {
-            results[i] = { ok: false, query: it, reason: '搜索失败' }
-          }
+          results[i] = await matchOneSong(items[i] || {}, engines, scoreOf, norm)
         }
       }
-      await Promise.all(Array.from({ length: Math.max(1, Math.min(6, items.length)) }, worker))
+      await Promise.all(Array.from({ length: Math.max(1, Math.min(MATCH_CONCURRENCY, items.length)) }, worker))
       const matched = results.filter((r) => r.ok).length
-      return sendJSON(res, { results, matched, total: items.length, source: plat })
+      const loose = results.filter((r) => r.loose).length
+      // 各引擎命中统计，便于前端如实展示「用了哪些音源」
+      const viaStats = {}
+      for (const r of results) if (r.ok) viaStats[r.viaLabel || r.via || '未知'] = (viaStats[r.viaLabel || r.via || '未知'] || 0) + 1
+      return sendJSON(res, {
+        results, matched, total: items.length, loose,
+        engines: engines.map((e) => e.key), viaStats,
+        source: engines[0] ? engines[0].key : 'auto',
+      })
     }
     if (pathname === '/api/search') {
       const type = query.get('type') || 'song'
