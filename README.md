@@ -1,4 +1,10 @@
-# 利阳·随心听 (lx-music-web)
+# 利阳·随心听 (ly-music-web)
+
+> ⚠️ **仅供个人学习与技术研究，禁止任何商业用途。**
+> 本项目采用 [署名-非商业性使用许可](./LICENSE)（2026-11-07 起，原 MIT 授权已终止）。
+> 使用前请阅读 [免责声明](./DISCLAIMER.md) 与 [致谢 / 版权归属](./CREDITS.md)。
+> 本项目与 LX Music / MusicFree / 各音乐平台**无官方关联，未获授权或背书**；
+> 不内置任何第三方音源脚本，不提供或托管任何音乐文件。请支持正版。
 
 参考 **洛雪音乐 LX Music 移动版 1.9.1** 的音源架构，用纯 Web 技术重写的一版「随机播放热门歌曲」音乐播放器（类似汽水音乐风格）。
 后端参考了 LX Music 的酷我(kw) 音源协议，重写了其请求契约与逐字歌词(lrcx)解码。
@@ -14,7 +20,7 @@
 
 ## 目录结构
 ```
-lx-music-web/
+ly-music-web/
 ├── server.js            # 纯 Node 后端（零 npm 依赖）：音源 API + 媒体代理 + 音源编排
 ├── lxsource.js          # 洛雪自定义源脚本运行时（vm 沙箱 + lx.request/utils 桥接）
 ├── sources/             # 洛雪源脚本目录（默认为空；放入洛雪源脚本后由运行时自动加载）
@@ -33,7 +39,7 @@ lx-music-web/
 
 ## 本地运行（开发 / 验证）
 ```bash
-cd lx-music-web
+cd ly-music-web
 node server.js          # 默认端口 3005
 # 浏览器打开 http://localhost:3005
 ```
@@ -63,20 +69,20 @@ npm test
 目标主机：`hly1221.top`（局域网 `192.168.4.2`），端口 `3005`（原 al-music 已清理，端口空闲）。
 
 ### 方式 A：Docker Manager Web 界面（推荐，纯鼠标）
-1. 用 Samba / 文件管理把 `lx-music-web` 整个文件夹上传到路由器，例如 `/mnt/docker/apps/lx-music-web`。
+1. 用 Samba / 文件管理把 `ly-music-web` 整个文件夹上传到路由器，例如 `/mnt/docker/apps/ly-music-web`。
 2. 打开路由器的 **Docker / 容器管理** 界面 → 拉取镜像 `node:20-alpine`。
 3. 新建容器：
    - 镜像：`node:20-alpine`
-   - 容器名：`lx-music-web`
+   - 容器名：`ly-music-web`
    - 端口映射：`3005` → `3005`（TCP）
-   - 目录挂载：主机 `/mnt/docker/apps/lx-music-web` → 容器 `/app`（只读可不加）
+   - 目录挂载：主机 `/mnt/docker/apps/ly-music-web` → 容器 `/app`（只读可不加）
    - 运行命令 / 启动脚本：`node /app/server.js`
    - 重启策略：始终重启（unless-stopped）
 4. 保存并启动。手机/电脑浏览器访问 `http://hly1221.top:3005` 或 `http://192.168.4.2:3005`。
 
 ### 方式 B：docker-compose（SSH 终端）
 ```bash
-cd /mnt/docker/apps/lx-music-web
+cd /mnt/docker/apps/ly-music-web
 docker compose up -d --build
 ```
 
@@ -133,7 +139,7 @@ docker compose up -d --build
 - **音源编排**：`/api/song` 按「原生音源 → 洛雪源脚本 → 跨源匹配到网易云」回退，任一环节成功即返回。
 - **媒体代理**：`/api/audio` 与 `/api/cover` 由后端代理并纠正 MIME、支持 Range（透传 `content-range/content-length/etag/last-modified`）；上游返回 HTML（版权提示页）时不再当音频流，改回 502 + 明确报错。
 - **网络层重试**：`makeRequest` 做 3 次退避重试，只在"拿不到响应"的连接级错误时重试（4xx/5xx 不重试）；另有硬超时兜底（DNS/TCP 阶段 socket 未分配时 `req.setTimeout` 不生效）。
-- **请求日志**：每个请求打印 `[req] METHOD path -> status 耗时`，排障时 `docker logs lx-music-web` 即可判断请求是否到达服务器。
+- **请求日志**：每个请求打印 `[req] METHOD path -> status 耗时`，排障时 `docker logs ly-music-web` 即可判断请求是否到达服务器。
 - **零依赖**：后端仅用 Node 内置 `http/https/zlib/crypto/vm`，便于在路由器稳定长期运行。
 
 ## 音源管理面板用法
@@ -161,15 +167,29 @@ docker compose up -d --build
 > 例如 `kw` 测试显示 `via=lx-xxxx/kw` 表示酷我是通过你导入的洛雪脚本绕过去的
 > （官方取址已关闭），这条路径才是当前酷我歌曲能播的原因。
 
-## 音源与版权
+## 许可、致谢与版权
 
-本仓库**不内置、不打包任何第三方音源脚本**。所有"洛雪源脚本"都由你**自行导入**（面板右上角 🎵 → 导入），导入内容只存到你自己的 `data/sources/`（docker volume 持久化），不会进入本仓库。
+> **本项目仅供个人学习与技术研究，禁止任何商业用途**（出售、收费分发、嵌入
+> 商业产品 / 网站 / App、SaaS / 会员服务、广告或流量变现等一律禁止）。
+> 2026-11-07 起许可由 MIT 变更为 [署名-非商业性使用许可](./LICENSE)，
+> 复制或分发时须保留版权声明、许可声明与致谢。
 
-- 代码本体（后端 / 前端 / 洛雪运行时 `lxsource.js`）均为原创，以 **MIT 许可证** 发布，详见 [LICENSE](./LICENSE)。
-- 你导入的第三方源脚本可能带有各自许可证（如 LX Music 相关脚本为 GPL-3.0）；**使用、分发这些脚本的法律责任由导入者自行承担**，本仓库不负连带责任。
-- 音乐内容本身受版权保护，请仅用于个人学习 / 试听，并遵守各平台服务条款。详见 [免责声明 DISCLAIMER](./DISCLAIMER.md)。
+本仓库**不内置、不打包、不分发任何第三方音源脚本**。所有"洛雪源脚本"都由你
+**自行导入**（面板右上角 🎵 → 导入），导入内容只存到你自己的 `data/sources/`
+（docker volume 持久化），不会进入本仓库。
 
-> 本仓库与 lyswhut/LX Music 官方项目**没有从属或打包关系**，仅参考其公开的 1.9.1 协议做独立重写，且不包含任何官方源脚本代码。
+- 代码本体（后端 / 前端 / 洛雪运行时 `lxsource.js`）均为原创，以
+  [署名-非商业性使用许可](./LICENSE) 发布。
+- **致谢**：完整上游项目、公开接口、社区音源作者清单见
+  [CREDITS.md](./CREDITS.md)。本项目与 lyswhut/LX Music 官方项目
+  **没有从属或打包关系**，仅参考其公开的 1.9.1 协议做独立重写，
+  且不包含任何官方源脚本代码。
+- 你导入的第三方源脚本可能带有各自许可证（如 LX Music 相关脚本为 GPL-3.0）；
+  **使用、分发这些脚本的法律责任由导入者自行承担**，本仓库不负连带责任。
+- 音乐作品、歌词、封面的版权归各版权方所有。本项目不缓存、不托管、
+  不再分发音乐文件，不绕过任何鉴权 / DRM / 地域限制；请仅用于个人学习 / 试听，
+  遵守各平台服务条款并支持正版。
+- 完整免责条款见 [DISCLAIMER.md](./DISCLAIMER.md)。
 
 ## API 速查
 | 接口 | 说明 |

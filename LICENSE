@@ -1,21 +1,76 @@
-MIT License
+署名-非商业性使用许可 / Attribution-NonCommercial License
+========================================================
 
+版权所有 (c) 2026 tiancai22679
 Copyright (c) 2026 tiancai22679
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+本许可适用于「利阳·随心听 / ly-music-web」项目中的自有代码与文档
+（不包含任何第三方音源脚本、音乐内容或平台数据，详见 CREDITS.md 与 DISCLAIMER.md）。
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+--------------------------------------------------------------------
+一、授予的权利 (Permissions)
+--------------------------------------------------------------------
+在严格遵守以下条款的前提下，特此免费授予任何获得本软件及相关文档副本
+（下称"本软件"）的个人以下权利：
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+  * 为**个人学习、研究、非商业性试用**目的运行、复制、修改本软件；
+  * 在非商业前提下与他人分享本软件的副本或修改后的版本；
+  * 为个人使用编写和导入自定义音源脚本。
+
+--------------------------------------------------------------------
+二、必须遵守的条件 (Conditions)
+--------------------------------------------------------------------
+  1. **署名 / 保留声明 (Attribution)**：所有副本或实质性部分必须保留本
+     许可声明、版权声明，以及 CREDITS.md 中对上游项目与音源作者的致谢。
+  2. **非商业性使用 (NonCommercial)**：不得以任何形式将本软件或其衍生
+     作品用于商业目的，包括但不限于：
+       - 出售、出租、收费分发本软件或基于本软件提供服务（含 SaaS、
+         会员制、订阅制、托管服务）；
+       - 将本软件嵌入商业产品、商业网站、App 或用于企业经营活动；
+       - 通过广告、流量变现、付费音源、付费歌单、打赏分成等方式
+         直接或间接获取商业收益；
+       - 以本软件名义接受赞助、承接定制开发或对外提供技术支持并收费。
+  3. **声明传递 (Notice)**：分发修改版时须明确标注已做的修改，并同样
+     适用本许可；不得对上游施加额外限制，也不得暗示官方背书。
+  4. **遵守第三方条款 (Third-party)**：本软件不包含第三方音源脚本与
+     音乐内容。使用者自行导入的脚本、调用的平台接口、播放的音乐作品，
+     均受各自版权方与服务条款约束，不在本许可授权范围内。
+
+--------------------------------------------------------------------
+三、禁止事项 (Prohibitions)
+--------------------------------------------------------------------
+  * 任何商业用途（见第二条）；
+  * 大规模分发、公开运营、去除或篡改版权/致谢/许可声明；
+  * 规避音乐平台的访问控制、DRM、鉴权或地域限制；
+  * 抓取、缓存、再分发受版权保护的音乐文件、歌词或专辑封面；
+  * 声称与 LX Music / MusicFree / 各音乐平台存在官方关联或获得其授权。
+
+--------------------------------------------------------------------
+四、免责与责任 (Disclaimer)
+--------------------------------------------------------------------
+本软件按"现状"(AS IS) 提供，不附带任何明示或暗示的担保，包括但不限
+于适销性、特定用途适用性及不侵权的担保。在任何情况下，作者或版权持有人
+均不对因使用或无法使用本软件而产生的任何索赔、损害、数据丢失、法律或
+合规责任负责，无论其基于合同、侵权或其他理由。
+
+使用者须自行确认并遵守所在地区法律法规及音乐平台服务条款。因使用
+本软件产生的全部合规风险由使用者自行承担。
+
+--------------------------------------------------------------------
+五、终止 (Termination)
+--------------------------------------------------------------------
+违反本许可任一条款，本许可授予的权利自动终止。终止后须停止一切使用
+并销毁所持副本。
+
+--------------------------------------------------------------------
+六、其他 (Miscellaneous)
+--------------------------------------------------------------------
+  * 本许可不构成对任何第三方商标、音乐作品、平台数据或音源脚本的授权。
+  * 如需商业授权，请另行联系版权持有人取得书面许可。
+  * 若本许可某条款被认定不可执行，其余条款继续有效。
+
+如不同意上述条款，请勿使用、修改或分发本软件。
+If you do not agree to these terms, do not use, modify or distribute
+this software.
+
+完整声明见：DISCLAIMER.md ｜ 上游致谢见：CREDITS.md

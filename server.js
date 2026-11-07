@@ -1,4 +1,4 @@
-// lx-music-web 后端：参考洛雪音乐(LX Music)音源架构，纯 Node 实现酷我(kw)音源
+// ly-music-web 后端：参考洛雪音乐(LX Music)音源架构，纯 Node 实现酷我(kw)音源
 // 搜索 / 热歌榜(榜单) / 取播放地址 / 封面 / 音频代理 / 歌词
 // 纯 Node 标准库，无 npm 依赖；自动识别 HTTPS_PROXY 走代理（沙箱用），生产无代理则直连。
 
@@ -1740,7 +1740,7 @@ const server = http.createServer((req, res) => {
 
 if (require.main === module) {
   server.listen(PORT, '0.0.0.0', async () => {
-    console.log(`lx-music-web 已启动: http://0.0.0.0:${PORT}`)
+    console.log(`ly-music-web 已启动: http://0.0.0.0:${PORT}`)
     await bootAllLxSources()
   })
 }

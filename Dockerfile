@@ -1,4 +1,4 @@
-# lx-music-web —— 纯 Node 运行，零 npm 依赖
+# ly-music-web —— 纯 Node 运行，零 npm 依赖
 FROM node:20-alpine
 WORKDIR /app
 COPY server.js ./

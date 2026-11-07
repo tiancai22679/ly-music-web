@@ -1,8 +1,8 @@
 services:
-  lx-music-web:
+  ly-music-web:
     build: .
-    image: lx-music-web:latest
-    container_name: lx-music-web
+    image: ly-music-web:latest
+    container_name: ly-music-web
     restart: unless-stopped
     ports:
       - "3005:3005"
@@ -10,4 +10,4 @@ services:
       - PORT=3005
     # 用户导入的洛雪音源脚本落盘目录（重建容器不丢）
     volumes:
-      - /mnt/docker/apps/lx-music-web/data:/app/data
+      - /mnt/docker/apps/ly-music-web/data:/app/data
