@@ -1124,8 +1124,28 @@ async function handleApi(req, res, pathname, query) {
   try {
     // 列表类接口统一支持 source（'auto' | 'ny' | 'kw' | '脚本id:音源名'），
     // 没有传时等价于 'auto' -> 用网易云兜底，保证列表永远有数据
+    // 汽水官方榜单：PC 端没有公开的榜单目录接口（/luna/pc/charts 只接受数字榜单 ID），
+    // 故内置 4 个官方榜（ID 来自 soda 包 sodaTopListDefinitions）。无需登录，GET 即可取歌。
+    const QISHUI_CHARTS = [
+      { id: '7036274230471712007', name: '热歌榜', desc: '汽水音乐内每周热度最高的 50 首歌，每周四更新' },
+      { id: '7060812597884869927', name: '新歌榜', desc: '近期发行的热度最高的 50 首新歌，每周四更新' },
+      { id: '7061475546400005410', name: '欧美榜', desc: '汽水音乐内每周热度最高的 50 首外文歌曲，每周四更新' },
+      { id: '7415959718721494311', name: '音乐人歌曲榜', desc: '抖音音乐人开放平台上传歌曲，综合每周站内热度排序' },
+    ]
+    const QISHUI_HOT_ID = '7036274230471712007'
     if (pathname === '/api/boards') {
       const pref = parseSourceParam(query.get('source') || query.get('from') || 'auto')
+      // 汽水榜单：内置 4 个官方榜，无需登录，走 /api/hot?source=qishui 取歌
+      if (pref.plat === 'qishui') {
+        return sendJSON(res, {
+          boards: QISHUI_CHARTS.map((c) => ({ ...c, source: 'qishui', from: 'qishui' })),
+          source: 'qishui',
+          via: 'native:qishui',
+          requested: pref.key,
+          fallback: false,
+          note: '汽水音乐官方榜单（每周四更新），列表来自汽水，播放用所选音源',
+        })
+      }
       const plat = listNative(pref.plat)
       let boards = []
       let note = ''
@@ -1287,6 +1307,31 @@ async function handleApi(req, res, pathname, query) {
     // (upstreamCode 28001035)，仅 discover 类匿名接口稳定；故用原生 fetch 打 luna 协议，
     // App 端 UA + POST JSON，无需登录、无需 x-luna 签名。
     const QISHUI_APP_UA = 'Luna/19.1.0 Android'
+    // 汽水榜单详情（GET，匿名）：https://api.qishui.com/luna/pc/charts/{id}?{sodaPCAppParams}
+    async function qishuiChartsGet(id) {
+      const params = new URLSearchParams({
+        aid: '386088',
+        channel: 'official',
+        device_platform: 'windows',
+        os_version: 'Windows 11',
+        device_id: '7304719759323564095',
+      })
+      const url = `https://api.qishui.com/luna/pc/charts/${encodeURIComponent(id)}?${params.toString()}`
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 15000)
+      try {
+        const r = await fetch(url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36' },
+          signal: ctrl.signal,
+        })
+        if (!r.ok) throw new Error('charts HTTP ' + r.status)
+        const j = await r.json()
+        if (j.status_code) throw new Error('charts err ' + ((j.status_info && j.status_info.status_msg) || j.status_code))
+        return j
+      } finally {
+        clearTimeout(timer)
+      }
+    }
     async function qishuiPost(host, path, body = {}) {
       const r = await fetch(host + path, {
         method: 'POST',
@@ -1568,6 +1613,45 @@ async function handleApi(req, res, pathname, query) {
     }
     if (pathname === '/api/hot') {
       const pref = parseSourceParam(query.get('source') || query.get('from') || 'auto')
+      // 汽水榜单：GET /luna/pc/charts/{id} 取歌（匿名），曲目经前端逐首匹配到可播音源（与汽水歌单同链路）
+      if (pref.plat === 'qishui') {
+        const board = query.get('board') || QISHUI_HOT_ID
+        const limit = Math.min(parseInt(query.get('limit')) || 100, 200)
+        let list = []
+        let name = board
+        let note = ''
+        try {
+          const j = await qishuiChartsGet(board)
+          const chart = j.chart || {}
+          name = chart.title || name
+          list = (chart.track_ranks || []).slice(0, limit).map((item, i) => {
+            const t = item.track || {}
+            const artists = Array.isArray(t.artists) ? t.artists.map((a) => a.name || a).join('/') : (t.artist || '')
+            return {
+              id: String(t.id || (item.rank && item.rank.track_id) || ''),
+              name: decodeHtml(t.name || t.title || ''),
+              singer: decodeHtml(artists),
+              album: decodeHtml((t.album && t.album.name) || ''),
+              duration: '',
+              cover: '',
+              source: 'qishui',
+              rank: i + 1,
+            }
+          })
+        } catch (e) {
+          note = '汽水榜单获取失败：' + e.message
+        }
+        return sendJSON(res, {
+          list,
+          board: name,
+          source: 'qishui',
+          from: 'qishui',
+          via: 'native:qishui',
+          requested: pref.key,
+          fallback: false,
+          note,
+        })
+      }
       const plat = listNative(pref.plat)
       const board = query.get('board') || (plat === 'kw' ? '16' : '3778678')
       const limit = Math.min(parseInt(query.get('limit')) || 100, 200)

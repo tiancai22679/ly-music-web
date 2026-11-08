@@ -56,7 +56,7 @@ function fetchJSON(url, timeout = 15000) {
     })
 }
 // 封面：优先用歌曲自带直链，否则用 id 走后端解析；都没有则用项目 logo 占位，避免破图
-const LOGO_PLACEHOLDER = 'assets/ly-logo-192.png?v=20261107i'
+const LOGO_PLACEHOLDER = 'assets/ly-logo-192.png?v=20261108a'
 const coverURL = (song) => {
   if (!song) return LOGO_PLACEHOLDER
   if (song.cover) return '/api/cover?u=' + encodeURIComponent(song.cover)
@@ -111,7 +111,7 @@ const sourceLabel = (s) => SOURCE_LABEL[s] || s || ''
 // 列表数据（搜索/榜单）只能由原生引擎提供：洛雪脚本只负责取址，
 // 因此把用户选择的音源映射到对应引擎（与后端 LIST_NATIVE 保持一致）
 const LIST_NATIVE = { ny: 'ny', wy: 'ny', kw: 'kw', kg: 'ny', tx: 'ny', mg: 'ny', qs: 'ny' }
-const DEFAULT_BOARD = { ny: { id: '3778678', name: '热歌榜' }, kw: { id: '16', name: '热歌榜' } }
+const DEFAULT_BOARD = { ny: { id: '3778678', name: '热歌榜' }, kw: { id: '16', name: '热歌榜' }, qishui: { id: '7036274230471712007', name: '热歌榜' } }
 const sourcePlat = (key) => (String(key || '').includes(':') ? String(key).split(':')[1] : String(key || ''))
 const nativeOf = (key) => (!key || key === 'auto' ? 'ny' : LIST_NATIVE[sourcePlat(key)] || 'ny')
 // 播放时手动指定的音源（'auto' = 自动回退）
@@ -337,6 +337,18 @@ async function loadList(id, name) {
       data = await loadPlaylistViaImport(id, name)
     } else if (state.listKind === 'playlist') {
       data = await API.playlist(id, state.playlistPlat, 1000)
+    } else if (state.listKind === 'board' && state.boardPlat === 'qishui') {
+      // 汽水榜单：后端返回原始曲目（曲名+歌手），逐首匹配到可播音源（与汽水歌单同链路，拿到真实封面）
+      const raw = await API.hot(id, 1000, 'qishui')
+      const items = (raw.list || []).map((s) => ({ name: s.name, artist: s.singer }))
+      if (!items.length) throw new Error('未解析到曲目（榜单可能为空）')
+      const m = await API.match(items, preferSource)
+      const songs = []
+      let miss = 0
+      ;(m.results || []).forEach((r) => { if (r.ok && r.song) songs.push(r.song); else miss++ })
+      if (!songs.length) throw new Error('逐首匹配均未命中，可改用「粘贴歌单导入」手动匹配')
+      const note = [raw.note, miss ? `${miss} 首未匹配已跳过（共 ${m.total} 首）` : '', matchViaNote(m)].filter(Boolean).join('；')
+      data = { list: songs, source: 'qishui', note }
     } else {
       data = await API.hot(id, 1000, state.boardPlat)
     }
