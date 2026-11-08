@@ -56,7 +56,7 @@ function fetchJSON(url, timeout = 15000) {
     })
 }
 // 封面：优先用歌曲自带直链，否则用 id 走后端解析；都没有则用项目 logo 占位，避免破图
-const LOGO_PLACEHOLDER = 'assets/ly-logo-192.png?v=20261107h'
+const LOGO_PLACEHOLDER = 'assets/ly-logo-192.png?v=20261107i'
 const coverURL = (song) => {
   if (!song) return LOGO_PLACEHOLDER
   if (song.cover) return '/api/cover?u=' + encodeURIComponent(song.cover)
@@ -64,6 +64,30 @@ const coverURL = (song) => {
   return LOGO_PLACEHOLDER
 }
 const audioURL = (u) => '/api/audio?u=' + encodeURIComponent(u)
+
+// 汽水歌单封面：卡片先放占位图，随后限流并发地从后端匹配真实封面（汽水 CDN 需签名，直连 400）
+const COVER_CONCURRENCY = 5
+let _coverActive = 0
+const _coverQueue = []
+function _coverNext() {
+  if (_coverActive >= COVER_CONCURRENCY || !_coverQueue.length) return
+  _coverActive++
+  const { card, pid } = _coverQueue.shift()
+  fetch('/api/qishui-cover?id=' + encodeURIComponent(pid), { cache: 'no-store' })
+    .then((r) => r.json())
+    .then((j) => {
+      if (j && j.cover) {
+        const pc = card.querySelector('.playlist-cover')
+        if (pc) { pc.onerror = null; pc.src = '/api/cover?u=' + encodeURIComponent(j.cover) }
+      }
+    })
+    .catch(() => {})
+    .finally(() => { _coverActive--; _coverNext() })
+}
+function resolveQishuiCover(card, pid) {
+  _coverQueue.push({ card, pid })
+  _coverNext()
+}
 
 // ---------- 状态 ----------
 const state = {
@@ -417,16 +441,25 @@ async function loadPlaylistsPage(reset) {
       card.className = 'playlist-card'
       card.dataset.id = String(p.id)
       card.dataset.plat = plat
+      // 汽水封面 CDN 需签名（直连/代理均 400），先用占位图，随后异步从已接入音源匹配真实封面
+      const initCover = plat === 'qishui' ? LOGO_PLACEHOLDER
+        : (p.cover ? '/api/cover?u=' + encodeURIComponent(p.cover) : LOGO_PLACEHOLDER)
       card.innerHTML =
-        `<img class="playlist-cover" src="${p.cover ? '/api/cover?u=' + encodeURIComponent(p.cover) : LOGO_PLACEHOLDER}" alt="" loading="lazy" />` +
+        `<img class="playlist-cover" src="${initCover}" alt="" loading="lazy" />` +
         `<div class="playlist-text">` +
           `<div class="playlist-name">${escapeHtml(p.name)}</div>` +
           `<div class="playlist-meta">${p.playCount ? '▶ ' + formatPlayCount(p.playCount) : ''}${p.creator ? ' · ' + escapeHtml(p.creator) : ''}</div>` +
         `</div>`
       card.title = p.name + (p.creator ? ' · ' + p.creator : '')   // 紧凑布局下悬停看全名
-      // 封面拉取失败（如汽水 CDN 需签名）时回退到品牌占位图，避免破图
       const pc = card.querySelector('.playlist-cover')
-      if (pc) pc.onerror = () => { pc.onerror = null; pc.src = LOGO_PLACEHOLDER }
+      if (pc) {
+        if (plat === 'qishui') {
+          pc.onerror = () => { pc.onerror = null; pc.src = LOGO_PLACEHOLDER }  // 异步解析成功前不报破图
+          resolveQishuiCover(card, String(p.id))   // 异步从音源匹配真实封面并替换
+        } else {
+          pc.onerror = () => { pc.onerror = null; pc.src = LOGO_PLACEHOLDER }
+        }
+      }
       card.onclick = () => selectPlaylist(p)
       els.playlistGrid.appendChild(card)
     })

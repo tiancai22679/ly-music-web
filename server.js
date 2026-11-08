@@ -1350,6 +1350,70 @@ async function handleApi(req, res, pathname, query) {
       })
     }
 
+    // 汽水封面 CDN 需签名（直连/代理均 400），改为按歌单首曲在已接入音源匹配出真实可用封面
+    const qishuiCoverCache = new Map()
+    const QCOVER_MAX = 3            // 并发限流，避免一次性刷 20 张封面触发上游限流
+    let _qcRunning = 0
+    const _qcWaiters = []
+    function _qcAcquire() {
+      return new Promise((res) => {
+        if (_qcRunning < QCOVER_MAX) { _qcRunning++; res() }
+        else _qcWaiters.push(res)
+      })
+    }
+    function _qcRelease() {
+      _qcRunning--
+      if (_qcWaiters.length) { _qcRunning++; _qcWaiters.shift()() }
+    }
+    async function qishuiResolveCover(pid) {
+      const k = 'qc:' + pid
+      const hit = qishuiCoverCache.get(k)
+      if (hit && Date.now() < hit.exp) return hit.cover
+      const norm = (s) => String(s || '').toLowerCase()
+        .replace(/[（(【\[「『].*?[）)】\]」』]/g, '')
+        .replace(/[\s\-–—_:：,，。.、·/'"]+/g, '')
+      const scoreOf = (it, s) => {
+        const qn = norm(it.name), cn = norm(s.name)
+        if (!qn || !cn) return -1
+        const nameOk = cn === qn ||
+          (cn.includes(qn) && qn.length >= 2) ||
+          (qn.includes(cn) && cn.length >= Math.max(2, Math.floor(qn.length * 0.6)))
+        if (!nameOk) return -1
+        let sc = cn === qn ? 3 : 1
+        const qa = norm(it.artist), cs = norm(s.singer)
+        if (qa) sc += (cs && (cs.includes(qa) || qa.includes(cs))) ? 3 : -2
+        if (/翻自|cover\s*[:：]|伴奏|网友改编|不插电|纯音乐|试听版/i.test(String(s.name || '')) &&
+            !/翻自|cover\s*[:：]|伴奏|网友改编|不插电|纯音乐|试听版/i.test(String(it.name || ''))) sc -= 0.5
+        return sc
+      }
+      let cover = ''
+      try {
+        const songs = await qishuiPlaylistSongs(String(pid), 3)
+        const engines = buildMatchEngines('auto')
+        for (const tr of songs) {
+          if (!tr.name) continue
+          const r = await matchOneSong({ name: tr.name, artist: tr.singer || '' }, engines, scoreOf, norm)
+          if (!r.ok || !r.song) continue
+          // 酷我/网易云搜索结果常不带封面，需按 id 补全（与前端 coverURL 的 id 兜底同源）
+          if (!r.song.cover) {
+            try {
+              if (r.via === 'kw') await kw.fillCover(r.song)
+              else if (r.via === 'ny' && r.song.id) r.song.cover = await ny.pic(r.song.id).catch(() => '')
+            } catch (_) {}
+          }
+          if (r.song.cover) { cover = r.song.cover; break }
+        }
+      } catch (e) { console.error('[qishui-cover]', e.message) }
+      // 仅缓存命中（6h）；空结果不缓存，避免上游抖动导致的超时把占位图锁死 10min
+      if (cover) qishuiCoverCache.set(k, { cover, exp: Date.now() + 6 * 3600 * 1000 })
+      return cover
+    }
+    async function qishuiResolveCoverLimited(pid) {
+      await _qcAcquire()
+      try { return await qishuiResolveCover(pid) }
+      finally { _qcRelease() }
+    }
+
     if (pathname === '/api/playlists') {
       const plat = query.get('platform') || 'ny'
       const limit = Math.min(parseInt(query.get('limit')) || 20, 60)
@@ -1388,6 +1452,14 @@ async function handleApi(req, res, pathname, query) {
         list = []
       }
       return sendJSON(res, { list, source, note })
+    }
+    // 汽水歌单封面：按首曲在已接入音源匹配出真实可用封面（汽水 CDN 需签名，直连/代理均 400）
+    if (pathname === '/api/qishui-cover') {
+      const pid = query.get('id')
+      if (!pid) return sendJSON(res, { error: '缺少 id' }, 400)
+      const t = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000))
+      const cover = await Promise.race([qishuiResolveCoverLimited(pid), t]).catch(() => '')
+      return sendJSON(res, { id: pid, cover: cover || '' })
     }
     // ---------- 粘贴歌单链接：多平台解析 → [{name, artist}] ----------
     // 解析网易云/QQ/千千/酷狗/酷我/KKBOX/Apple/Spotify 歌单链接，返回曲目（曲名+歌手），
