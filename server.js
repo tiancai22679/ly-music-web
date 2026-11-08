@@ -1282,6 +1282,74 @@ async function handleApi(req, res, pathname, query) {
       }))
     }
 
+    // ===== 汽水音乐（字节 luna 协议）=====
+    // qishui-music-api 库的 playlist_detail/playlist_tracks 在未登录态被汽水拒绝
+    // (upstreamCode 28001035)，仅 discover 类匿名接口稳定；故用原生 fetch 打 luna 协议，
+    // App 端 UA + POST JSON，无需登录、无需 x-luna 签名。
+    const QISHUI_APP_UA = 'Luna/19.1.0 Android'
+    async function qishuiPost(host, path, body = {}) {
+      const r = await fetch(host + path, {
+        method: 'POST',
+        headers: { 'User-Agent': QISHUI_APP_UA, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      return r.json()
+    }
+    function qishuiCollectMixes(o, out = []) {
+      if (!o || typeof o !== 'object') return out
+      if (Array.isArray(o)) return o.forEach((x) => qishuiCollectMixes(x, out))
+      if (('title' in o || 'name' in o) && 'id' in o && !('media_resources' in o)) out.push(o)
+      for (const k in o) qishuiCollectMixes(o[k], out)
+      return out
+    }
+    function qishuiCover(c) {
+      if (!c || !c.uri) return ''
+      const base = (Array.isArray(c.urls) && c.urls[0]) || 'https://p3-luna.douyinpic.com/img/'
+      return base + c.uri
+    }
+    // 热门歌单：汽水无榜单目录，用发现页推荐流 discover/mix（匿名逐轮抓取+去重填充分页）
+    async function qishuiPlaylists(limit = 20, offset = 0) {
+      const seen = new Set()
+      const all = []
+      let guard = 0
+      while (all.length < offset + limit && guard < 14) {
+        guard++
+        try {
+          const d = await qishuiPost('https://beta-luna.douyin.com', '/luna/discover/mix', {})
+          for (const m of qishuiCollectMixes(d)) {
+            if (!seen.has(m.id)) { seen.add(m.id); all.push(m) }
+          }
+        } catch (_) {}
+      }
+      return all.slice(offset, offset + limit).map((m) => ({
+        id: String(m.id),
+        name: decodeHtml(m.public_title || m.title || ''),
+        cover: qishuiCover(m.url_cover),
+        playCount: parseInt((m.stats && (m.stats.count_collected || m.stats.count_visible)) || 0),
+        creator: '',
+        desc: m.desc || '',
+      }))
+    }
+    // 歌单歌曲：playlist/detail 的 media_resources 里歌曲嵌套在 entity.track_wrapper.track
+    async function qishuiPlaylistSongs(pid, limit = 1000) {
+      const d = await qishuiPost('https://api.qishui.com', '/luna/playlist/detail', { playlist_id: String(pid) })
+      const list = Array.isArray(d.media_resources) ? d.media_resources : []
+      return list.slice(0, limit).map((item) => {
+        const t = (item.entity && item.entity.track_wrapper && item.entity.track_wrapper.track) || {}
+        const artists = Array.isArray(t.artists) ? t.artists.map((a) => a.name || a).join('/')
+          : (t.author && t.author.name) || t.artist || ''
+        return {
+          id: String(t.id || item.id),
+          name: decodeHtml(t.title || t.name || t.song_name || ''),
+          singer: decodeHtml(artists),
+          album: decodeHtml((t.album && t.album.name) || ''),
+          duration: 0,
+          cover: qishuiCover(t.album && t.album.url_cover),
+          source: 'qishui',
+        }
+      })
+    }
+
     if (pathname === '/api/playlists') {
       const plat = query.get('platform') || 'ny'
       const limit = Math.min(parseInt(query.get('limit')) || 20, 60)
@@ -1291,6 +1359,7 @@ async function handleApi(req, res, pathname, query) {
         if (plat === 'tx') list = await qqPlaylists(limit, offset)
         else if (plat === 'kg') list = await kgPlaylists(limit, offset)
         else if (plat === 'kw') list = await kwPlaylists(limit, offset)
+        else if (plat === 'qishui') list = await qishuiPlaylists(limit, offset)
         else list = await ny.playlists(limit, offset)
       } catch (_) { list = [] }
       hasMore = list.length >= limit
@@ -1312,6 +1381,7 @@ async function handleApi(req, res, pathname, query) {
         else if (plat === 'kg') list = await kgPlaylistSongs(id, limit)
         // 酷我走开放接口 nplserver.kuwo.cn，可取完整歌单（无需登录/签名）
         else if (plat === 'kw') list = await kwPlaylistSongs(id, limit)
+        else if (plat === 'qishui') list = await qishuiPlaylistSongs(id, limit)
         else list = await ny.hot(id, limit)
       } catch (e) {
         note = (plat === 'tx' ? 'QQ音乐' : plat === 'kg' ? '酷狗' : plat) + '歌单歌曲接口受限，暂无法播放'

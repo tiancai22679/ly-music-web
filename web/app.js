@@ -56,7 +56,7 @@ function fetchJSON(url, timeout = 15000) {
     })
 }
 // 封面：优先用歌曲自带直链，否则用 id 走后端解析；都没有则用项目 logo 占位，避免破图
-const LOGO_PLACEHOLDER = 'assets/ly-logo-192.png?v=20261107f'
+const LOGO_PLACEHOLDER = 'assets/ly-logo-192.png?v=20261107h'
 const coverURL = (song) => {
   if (!song) return LOGO_PLACEHOLDER
   if (song.cover) return '/api/cover?u=' + encodeURIComponent(song.cover)
@@ -73,7 +73,7 @@ const state = {
   listTitle: '热歌榜 · 精选',
   board: '3778678',   // 网易云热歌榜（默认）
   boardPlat: 'ny',    // 榜单所属平台（网易云/酷我），与播放音源相互独立，可下拉手动选择
-  playlistPlat: 'kw', // 歌单平台默认酷我（匿名接口最完整：可取全量曲目且原生 id 可直接播放）；与榜单平台相互独立
+  playlistPlat: 'qishui', // 歌单平台默认汽水音乐（匿名 discover/mix 推荐流，热门歌单即拿）；与榜单平台相互独立
   playlistOffset: 0,  // 歌单已加载数量（分页 offset），切换平台时归零
   listKind: 'board',  // 'board' | 'playlist'：当前列表是榜单还是歌单
   playlistId: null,   // 歌单模式下选中的歌单 id
@@ -82,7 +82,7 @@ const state = {
   listSource: 'ny',   // 当前列表数据实际来自哪个平台（后端返回）
   listNote: '',       // 后端给出的回退说明
 }
-const SOURCE_LABEL = { ny: '网易', kw: '酷我', kg: '酷狗', tx: 'QQ', wy: '网易', mg: '咪咕', qs: '汽水' }
+const SOURCE_LABEL = { ny: '网易', kw: '酷我', kg: '酷狗', tx: 'QQ', wy: '网易', mg: '咪咕', qs: '汽水', qishui: '汽水' }
 const sourceLabel = (s) => SOURCE_LABEL[s] || s || ''
 // 列表数据（搜索/榜单）只能由原生引擎提供：洛雪脚本只负责取址，
 // 因此把用户选择的音源映射到对应引擎（与后端 LIST_NATIVE 保持一致）
@@ -296,7 +296,7 @@ function renderListMeta(data) {
 
 // 直连歌曲接口受限的平台（QQ/酷狗）：点击歌单后走「解析歌单链接 + 逐首匹配」导入流程。
 // 酷我已改用开放接口 nplserver.kuwo.cn 直连取完整歌单，故不在此列。
-const LIMIT_PLATS = new Set(['tx', 'kg'])
+const LIMIT_PLATS = new Set(['tx', 'kg', 'qishui'])
 
 // 通用列表加载：榜单走 /api/hot（按榜单平台），歌单走 /api/playlist（按歌单平台，
 // 网易云可用，QQ/酷狗/酷我歌曲接口受限时后端会返回 note 提示无法播放）。
@@ -347,6 +347,19 @@ function matchViaNote(m) {
 // 改为「解析歌单分享链接拿到曲目名 → 逐首搜索匹配」的导入流程，返回可播放歌曲列表
 async function loadPlaylistViaImport(id, name) {
   const plat = state.playlistPlat
+  // 汽水歌单：用 playlist/detail 直连拿曲目名/歌手，再逐首匹配可播音源（与 QQ/酷狗同模式）
+  if (plat === 'qishui') {
+    const r = await API.playlist(id, 'qishui', 1000)
+    const items = (r.list || []).map((s) => ({ name: s.name, artist: s.singer }))
+    if (!items.length) throw new Error('未解析到曲目（歌单可能为空）')
+    const m = await API.match(items, preferSource)
+    const songs = []
+    let miss = 0
+    ;(m.results || []).forEach((r2) => { if (r2.ok && r2.song) songs.push(r2.song); else miss++ })
+    if (!songs.length) throw new Error('逐首匹配均未命中，可改用「粘贴歌单导入」手动匹配')
+    const note = [r.note, miss ? `${miss} 首未匹配已跳过（共 ${m.total} 首）` : '', matchViaNote(m)].filter(Boolean).join('；')
+    return { list: songs, source: 'qishui', note }
+  }
   const url = plat === 'tx'
     ? `https://y.qq.com/n/ryqq/playlist/${id}`
     : plat === 'kw'
@@ -411,6 +424,9 @@ async function loadPlaylistsPage(reset) {
           `<div class="playlist-meta">${p.playCount ? '▶ ' + formatPlayCount(p.playCount) : ''}${p.creator ? ' · ' + escapeHtml(p.creator) : ''}</div>` +
         `</div>`
       card.title = p.name + (p.creator ? ' · ' + p.creator : '')   // 紧凑布局下悬停看全名
+      // 封面拉取失败（如汽水 CDN 需签名）时回退到品牌占位图，避免破图
+      const pc = card.querySelector('.playlist-cover')
+      if (pc) pc.onerror = () => { pc.onerror = null; pc.src = LOGO_PLACEHOLDER }
       card.onclick = () => selectPlaylist(p)
       els.playlistGrid.appendChild(card)
     })
